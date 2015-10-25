@@ -6,14 +6,14 @@
 
 
 clc;clear;
-
+tic
 % parpool('local',2)
 
 
 
 % space grid point
 Nx=401;Lx=1000;dx=Lx/(Nx-1);
-xlable=[1:Nx]*dx-dx;
+xv=[1:Nx]*dx-dx;
 % wavelet initialization 
 f0=25;
 dt=0.004;Nt=301;
@@ -28,8 +28,8 @@ omega=2*pi/lt*[0:Nw-1 -Nw+1:-1];
 c0=1500;
 V=zeros(Nx,1);
 for ix=1:Nx
-    x=(ix-1)*dx;
-    if (x>=300)&(x<600)
+    xi=(ix-1)*dx;
+    if (xi>=300)&(xi<600)
         V(ix)=0.5;
     end
 end
@@ -37,62 +37,31 @@ Vmat=diag(V);
 
 %Linear equation solver
 solver='Matrix_inversion';  % 'Matrix_inversion' or 'Volterra'
- solver='Volterra';  % 'Matrix_inversion' or 'Volterra'
+solver='Volterra';  % 'Matrix_inversion' or 'Volterra'
 
 psir=zeros(Nx,Nt);
 
- tic
-for iw=1:Nt
+ 
+for iw=1:Nw
     k=omega(iw)/c0;
-    for ix=1:Nx
-          x=(ix-1)*dx;
-          G1d(ix)=-1i*k/2*exp(1i*k*abs(x));
-    end
+    G1d=-1i*k/2*exp(1i*k*abs(xv));
     Gmat=toeplitz(G1d,G1d);
     switch lower(solver)
     case {'matrix_inversion'}
-      
-%       for ix=1:Nx        
-%           for ix2=1:Nx
-%               Gmat(ix,ix2)=-1i*k/2*exp(1i*k*abs(ix-ix2)*dx);
-%           end
-%       end   
       Imat= eye(Nx);
       A=Imat-Vmat*Gmat*dx;
-      Tmat=inv(A)*Vmat;
-      
+      Tmat=inv(A)*Vmat;      
     case {'volterra'}
         GmatV=zeros(Nx,Nx);
-        for ix=1:Nx
-          x=(ix-1)*dx;
-          Gv1d(ix)=k*sin(k*x);
-        end
-        GmatV=tril(toeplitz(Gv1d));
-%         for ix=1:Nx
-%             for ix2=1:Nx
-%                % Gmat(ix,ix2)=-1i*k/2*exp(1i*k*abs(ix-ix2)*dx);
-%                 if(ix2<ix)              
-%                     GmatV(ix,ix2)=k*sin(k*(ix-ix2)*dx);
-%                 end      
-%             end
-%         end
-       
-
+        Gv1d=k*sin(k*xv);
+        GmatV=tril(toeplitz(Gv1d));       
         Imat= eye(Nx);
-        A=Imat-Vmat*GmatV*dx;
-%         invA=inv(A);
-%         T1mat=invA*Vmat;
-        T1mat=A\Vmat;
-        
-        for ix=1:Nx
-            x=(ix-1)*dx;
-            Gvect1(ix,1)=-1i*k/2*exp(-1i*k*x);
-            Gvect2(1,ix)=exp(1i*k*x);
-        end
-        
-%         Gvect3=Gvect1.';
-%         T2vect=invA*(Vmat*Gvect3)*dx;
-        T2vect=A\(Vmat*Gvect1*dx);
+        A=Imat-Vmat*GmatV*dx;      
+        Gvect1=-1i*k/2*exp(-1i*k*xv).';
+        Gvect2=exp(1i*k*xv);        
+        C=A\[Vmat Vmat*Gvect1*dx];
+        T1mat=C(1:Nx, 1:Nx);
+        T2vect=C(1:Nx,Nx+1);
         B=(1-Gvect2*T2vect);
         Rvect=Gvect2*T1mat/B;
         Tmat=T1mat+T2vect*Rvect;
@@ -101,24 +70,19 @@ for iw=1:Nt
       return
     end
     
-     for ix=1:Nx
-        xr=(ix-1)*dx;    
-        xs=0;
-        psi0(ix)=-1i*k/2*exp(1i*k*abs(xs-xr));
-        psis(ix)=-1i*k/2*exp(1i*k*(xr-xs));
-        
-
-
-     end
-     psir(1:Nx,iw)=psi0.'+Gmat*Tmat*psis.'*dx;
-     psir(1:Nx,iw)= psir(1:Nx,iw)*rw(iw);
-
+    psi0=-1i*k/2*exp(1i*k*abs(xv)).';
+    psis=-1i*k/2*exp(1i*k*xv).';
+    psir(1:Nx,iw)=psi0+Gmat*Tmat*psis*dx;
+    psir(1:Nx,iw)= psir(1:Nx,iw)*rw(iw);
+    if(iw>1)
+       psir(1:Nx,Nt-iw+2)= conj(psir(1:Nx,iw));
+    end
 end
-toc
+
 psirt=real(fft(psir,[],2));
 
 figure
-imagesc(time*1000,xlable,psirt)
+imagesc(time*1000,xv,psirt)
 ylabel('Distance (m)'); xlabel('Time (ms)');
 title('Wave field');
 axis image;colorbar
@@ -126,9 +90,7 @@ set(gca,'XAxisLocation','top');colormap(flipud(gray))
 set(gca,'YTick',[0 500 1000]);
 set(gca,'XTick',[0 500 1000]);
 
-
-
-c=c0./sqrt(1-V);
+toc
 
 
 %% inversion
